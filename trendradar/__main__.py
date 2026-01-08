@@ -708,8 +708,8 @@ class NewsAnalyzer:
             # 抓取数据
             rss_data = fetcher.fetch_all()
 
-            # 保存到存储后端
-            if self.storage_manager.save_rss_data(rss_data):
+            # 保存到存储后端，并传入 session 以便进行二次抓取
+            if self.storage_manager.save_rss_data(rss_data, fetcher.session):
                 print(f"[RSS] 数据已保存到存储后端")
 
                 # 处理 RSS 数据（按模式过滤）并返回用于合并推送

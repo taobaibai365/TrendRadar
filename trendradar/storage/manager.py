@@ -8,6 +8,8 @@
 import os
 from typing import Optional
 
+import requests
+
 from trendradar.storage.base import StorageBackend, NewsData, RSSData
 
 
@@ -201,9 +203,9 @@ class StorageManager:
         """保存新闻数据"""
         return self.get_backend().save_news_data(data)
 
-    def save_rss_data(self, data: RSSData) -> bool:
+    def save_rss_data(self, data: RSSData, session: Optional[requests.Session] = None) -> bool:
         """保存 RSS 数据"""
-        return self.get_backend().save_rss_data(data)
+        return self.get_backend().save_rss_data(data, session=session)
 
     def get_rss_data(self, date: Optional[str] = None) -> Optional[RSSData]:
         """获取指定日期的所有 RSS 数据（当日汇总模式）"""

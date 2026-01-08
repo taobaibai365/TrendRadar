@@ -1,0 +1,10 @@
+{
+	"id": "trendradar-ai-assistant",
+	"name": "TrendRadar AI Assistant",
+	"version": "1.0.0",
+	"minAppVersion": "1.5.0",
+	"description": "Displays AI-analyzed trends and news from your TrendRadar backend.",
+	"author": "TrendRadar AI",
+	"authorUrl": "https://github.com/sansan0/TrendRadar",
+	"isDesktopOnly": false
+}

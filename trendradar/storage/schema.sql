@@ -12,8 +12,24 @@ CREATE TABLE IF NOT EXISTS platforms (
 );
 
 -- ============================================
+-- AI 分析主题表 (新)
+-- 存储 AI 对多个 news_items 聚合分析后的结果
+-- ============================================
+CREATE TABLE IF NOT EXISTS analysis_themes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    key_points TEXT, -- 存储要点，格式为 JSON 或 换行分隔的文本
+    category TEXT,
+    importance INTEGER,
+    impact INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- 新闻条目表
 -- 以 URL + platform_id 为唯一标识，支持去重存储
+-- 增加了 theme_id 用于关联分析主题
 -- ============================================
 CREATE TABLE IF NOT EXISTS news_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,13 +38,28 @@ CREATE TABLE IF NOT EXISTS news_items (
     rank INTEGER NOT NULL,
     url TEXT DEFAULT '',
     mobile_url TEXT DEFAULT '',
+    theme_id INTEGER, -- 关联到分析主题 (新)
     first_crawl_time TEXT NOT NULL,      -- 首次抓取时间
     last_crawl_time TEXT NOT NULL,       -- 最后抓取时间
     crawl_count INTEGER DEFAULT 1,       -- 抓取次数
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (platform_id) REFERENCES platforms(id)
+    FOREIGN KEY (platform_id) REFERENCES platforms(id),
+    FOREIGN KEY (theme_id) REFERENCES analysis_themes(id)
 );
+
+-- ============================================
+-- 文章全文内容表 (新)
+-- 一对一存储 news_items 的全文
+-- ============================================
+CREATE TABLE IF NOT EXISTS article_contents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    news_item_id INTEGER NOT NULL UNIQUE,
+    content TEXT,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (news_item_id) REFERENCES news_items(id)
+);
+
 
 -- ============================================
 -- 标题变更历史表
@@ -115,3 +146,10 @@ CREATE INDEX IF NOT EXISTS idx_crawl_status_record ON crawl_source_status(crawl_
 
 -- 排名历史索引
 CREATE INDEX IF NOT EXISTS idx_rank_history_news ON rank_history(news_item_id);
+
+-- 新增索引 --
+-- 分析主题ID索引 (新)
+CREATE INDEX IF NOT EXISTS idx_news_theme_id ON news_items(theme_id);
+
+-- 全文内容关联索引 (新)
+CREATE INDEX IF NOT EXISTS idx_article_contents_news_item_id ON article_contents(news_item_id);

@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import requests
+
+from trendradar.crawler.scraper import scrape_article_content
 from trendradar.storage.base import StorageBackend, NewsItem, NewsData, RSSItem, RSSData
 from trendradar.utils.time import (
     get_configured_time,
@@ -961,12 +964,13 @@ class LocalStorageBackend(StorageBackend):
     # RSS 数据存储方法
     # ========================================
 
-    def save_rss_data(self, data: RSSData) -> bool:
+    def save_rss_data(self, data: RSSData, session: Optional[requests.Session] = None) -> bool:
         """
         保存 RSS 数据到 SQLite（以 URL 为唯一标识）
 
         Args:
             data: RSS 数据
+            session: requests 会话对象（用于二次抓取）
 
         Returns:
             是否保存成功
@@ -990,6 +994,7 @@ class LocalStorageBackend(StorageBackend):
             # 统计计数器
             new_count = 0
             updated_count = 0
+            content_scraped_count = 0
 
             for feed_id, rss_list in data.items.items():
                 for item in rss_list:
@@ -1029,7 +1034,19 @@ class LocalStorageBackend(StorageBackend):
                                 """, (item.title, feed_id, item.url, item.published_at,
                                       item.summary, item.author, data.crawl_time,
                                       data.crawl_time, now_str, now_str))
+                                new_id = cursor.lastrowid
                                 new_count += 1
+
+                                # --- 全文抓取 ---
+                                if session and item.url:
+                                    content = scrape_article_content(item.url, session)
+                                    if content:
+                                        cursor.execute("""
+                                            INSERT INTO article_contents (rss_item_id, content)
+                                            VALUES (?, ?)
+                                        """, (new_id, content))
+                                        content_scraped_count += 1
+
                         else:
                             # URL 为空，直接插入
                             cursor.execute("""
@@ -1090,6 +1107,8 @@ class LocalStorageBackend(StorageBackend):
             log_parts = [f"[本地存储] RSS 处理完成：新增 {new_count} 条"]
             if updated_count > 0:
                 log_parts.append(f"更新 {updated_count} 条")
+            if content_scraped_count > 0:
+                log_parts.append(f"抓取全文 {content_scraped_count} 篇")
             print("，".join(log_parts))
 
             return True

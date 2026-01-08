@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
+import requests
+
 
 @dataclass
 class NewsItem:
@@ -378,6 +380,20 @@ class StorageBackend(ABC):
 
         Returns:
             保存的文件路径
+        """
+        pass
+
+    @abstractmethod
+    def save_rss_data(self, data: RSSData, session: Optional[requests.Session] = None) -> bool:
+        """
+        保存 RSS 数据
+
+        Args:
+            data: RSS 数据
+            session: requests 会话对象（用于二次抓取）
+
+        Returns:
+            是否保存成功
         """
         pass
 

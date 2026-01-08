@@ -25,6 +25,7 @@ from trendradar.core.analyzer import (
     count_word_frequency,
     count_rss_frequency,
 )
+from trendradar.core.ai_analyzer import run_ai_analysis
 
 __all__ = [
     "parse_multi_account_config",
@@ -46,4 +47,6 @@ __all__ = [
     "format_time_display",
     "count_word_frequency",
     "count_rss_frequency",
+    # AI 分析
+    "run_ai_analysis",
 ]
