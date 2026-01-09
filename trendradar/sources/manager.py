@@ -162,6 +162,10 @@ class SourceManager:
     def list_sources(self) -> List[SourceConfig]:
         """获取所有数据源配置列表"""
         return list(self._sources.values())
+
+    def get_all_sources(self) -> List[SourceConfig]:
+        """获取所有数据源配置列表（兼容旧接口）"""
+        return self.list_sources()
     
     def get_source(self, source_id: str) -> Optional[SourceConfig]:
         """
