@@ -215,3 +215,87 @@
     margin-top: var(--size-4-2);
   }
 }
+
+/* ========================================
+   设置页面 Tab 样式 (修复 UI Broken 问题)
+   ======================================== */
+
+.trendradar-settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: var(--size-4-4);
+  overflow-x: auto;
+}
+
+.trendradar-settings-tab {
+  padding: var(--size-4-2) var(--size-4-4);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+}
+
+.trendradar-settings-tab:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+.trendradar-settings-tab.active {
+  color: var(--text-normal);
+  border-bottom-color: var(--interactive-accent);
+}
+
+.trendradar-settings-content {
+  padding: var(--size-4-2) 0;
+}
+
+/* 修复数据源列表为空时的样式 */
+.trendradar-empty-state {
+  padding: var(--size-4-8);
+  text-align: center;
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-m);
+  border: 1px dashed var(--background-modifier-border);
+}
+
+/* 修复数据源图标样式 */
+.source-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: var(--background-secondary-alt);
+  border-radius: var(--radius-s);
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--text-muted);
+}
+
+.source-info {
+  flex: 1;
+  min-width: 0;
+  margin: 0 var(--size-4-3);
+}
+
+.source-name {
+  font-weight: var(--font-bold);
+  margin-bottom: 2px;
+}
+
+.source-url {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
