@@ -343,21 +343,10 @@ class NewsAnalyzer:
             )
 
         # HTML生成（如果启用）
+        # Obsidian 模式下禁用 HTML 生成
         html_file = None
-        if self.ctx.config["STORAGE"]["FORMATS"]["HTML"]:
-            html_file = self.ctx.generate_html(
-                stats,
-                total_titles,
-                failed_ids=failed_ids,
-                new_titles=new_titles,
-                id_to_name=id_to_name,
-                mode=mode,
-                is_daily_summary=is_daily_summary,
-                update_info=self.update_info if self.ctx.config["SHOW_VERSION_UPDATE"] else None,
-                rss_items=rss_items,
-                rss_new_items=rss_new_items,
-                ai_themes=ai_themes,
-            )
+        if not quiet:
+            print("HTML 报告生成已禁用 (Obsidian Mode)")
 
         return stats, html_file
 

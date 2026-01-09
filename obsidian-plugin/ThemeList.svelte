@@ -24,6 +24,7 @@
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
     
     const groups: { [key: string]: ThemeSummary[] } = {
+      '刚刚': [],
       '今天': [],
       '昨天': [],
       '更早': []
@@ -32,8 +33,11 @@
     for (const theme of themes) {
       const createdAt = new Date(theme.created_at);
       const themeDate = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+      const hoursDiff = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
       
-      if (themeDate.getTime() >= today.getTime()) {
+      if (hoursDiff < 1) {
+        groups['刚刚'].push(theme);
+      } else if (themeDate.getTime() >= today.getTime()) {
         groups['今天'].push(theme);
       } else if (themeDate.getTime() >= yesterday.getTime()) {
         groups['昨天'].push(theme);
@@ -98,6 +102,15 @@
       return tagsStr.split(',').map(t => t.trim()).filter(t => t);
     }
   }
+  
+  function parseKeywords(keywordsStr: string | undefined): string[] {
+    if (!keywordsStr) return [];
+    try {
+      return JSON.parse(keywordsStr);
+    } catch {
+      return keywordsStr.split(',').map(t => t.trim()).filter(t => t);
+    }
+  }
 </script>
 
 <div class="trendradar-theme-list-container">
@@ -113,7 +126,7 @@
         <div class="batch-header" on:click={() => toggleBatch(batchIndex)} role="button" tabindex="0">
           <span class="batch-toggle">{batch.collapsed ? '▶' : '▼'}</span>
           <span class="batch-label">{batch.label}</span>
-          <span class="batch-count">{batch.themes.length} 条</span>
+          <span class="batch-count">{batch.themes.length}</span>
         </div>
         
         {#if !batch.collapsed}
@@ -125,62 +138,43 @@
                 role="button" 
                 tabindex="0"
               >
-                <!-- 卡片头部 -->
+                <!-- 卡片头部：标题与状态 -->
                 <div class="card-header">
-                  <div class="card-meta">
-                    <span class="category">{theme.category}</span>
+                  <div class="title-row">
                     {#if isNew(theme) && theme.status !== 'read'}
-                      <span class="new-badge">NEW</span>
+                      <span class="new-dot" title="新内容"></span>
                     {/if}
-                    {#if theme.status === 'archived'}
-                      <span class="archived-badge">已归档</span>
-                    {/if}
+                    <h2 class="title">{theme.title}</h2>
                   </div>
                   <div class="importance-badge {getImportanceClass(theme.importance)}">
-                    ⭐ {theme.importance}
+                    {theme.importance}
                   </div>
                 </div>
                 
-                <!-- 标题 -->
-                <h2 class="title">{theme.title}</h2>
-                
-                <!-- 摘要 -->
+                <!-- 摘要 (紧凑模式) -->
                 <p class="summary">{theme.summary}</p>
                 
-                <!-- 标签 -->
-                {#if theme.tags}
-                  <div class="tags">
-                    {#each parseTags(theme.tags).slice(0, 4) as tag}
-                      <span class="tag">{tag}</span>
-                    {/each}
-                  </div>
-                {/if}
+                <!-- 关键词与标签 -->
+                <div class="meta-row">
+                  {#if theme.keywords}
+                    <div class="keywords">
+                      {#each parseKeywords(theme.keywords).slice(0, 3) as kw}
+                        <span class="keyword">#{kw}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                  <span class="category-tag">{theme.category}</span>
+                </div>
                 
-                <!-- 卡片底部 -->
+                <!-- 卡片底部：时间与操作 -->
                 <div class="card-footer">
-                  <div class="footer-info">
-                    <span class="impact">影响力: {theme.impact}/10</span>
-                    <span class="time">{new Date(theme.created_at).toLocaleString('zh-CN', { 
-                      month: 'numeric', 
-                      day: 'numeric', 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}</span>
-                  </div>
+                  <span class="time">{new Date(theme.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+                  
                   <div class="card-actions">
                     {#if theme.status !== 'read' && theme.status !== 'archived'}
-                      <button class="action-btn" on:click={(e) => handleMarkRead(e, theme.id)} title="标记已读">
-                        ✓
-                      </button>
+                      <button class="action-btn" on:click={(e) => handleMarkRead(e, theme.id)} title="标记已读">✓</button>
                     {/if}
-                    {#if theme.status !== 'archived'}
-                      <button class="action-btn" on:click={(e) => handleArchive(e, theme.id)} title="归档">
-                        📥
-                      </button>
-                    {/if}
-                    <button class="action-btn delete" on:click={(e) => handleDelete(e, theme.id)} title="删除">
-                      🗑
-                    </button>
+                    <button class="action-btn delete" on:click={(e) => handleDelete(e, theme.id)} title="删除">×</button>
                   </div>
                 </div>
               </div>
@@ -194,7 +188,7 @@
 
 <style>
   .trendradar-theme-list-container {
-    padding: var(--size-4-2);
+    padding: 8px;
     height: 100%;
     overflow-y: auto;
   }
@@ -206,39 +200,34 @@
   }
 
   .empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-  }
-
-  .empty-state .hint {
-    font-size: var(--font-ui-smaller);
-    color: var(--text-faint);
+    font-size: 32px;
+    margin-bottom: 10px;
   }
 
   /* 批次分组 */
   .batch-group {
-    margin-bottom: var(--size-4-4);
+    margin-bottom: 12px;
   }
 
   .batch-header {
     display: flex;
     align-items: center;
-    padding: var(--size-4-2) var(--size-4-3);
-    background-color: var(--background-secondary);
-    border-radius: var(--radius-s);
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
     cursor: pointer;
     user-select: none;
-    margin-bottom: var(--size-4-2);
+    margin-bottom: 4px;
+    border-radius: 4px;
   }
 
   .batch-header:hover {
-    background-color: var(--background-secondary-alt);
+    background-color: var(--background-modifier-hover);
   }
 
   .batch-toggle {
-    margin-right: var(--size-4-2);
+    margin-right: 6px;
     font-size: 10px;
-    color: var(--text-muted);
   }
 
   .batch-label {
@@ -247,160 +236,147 @@
   }
 
   .batch-count {
-    font-size: var(--font-ui-smaller);
-    color: var(--text-muted);
+    background-color: var(--background-modifier-border);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
   }
 
   /* 主题列表 */
   .theme-list {
-    display: grid;
-    gap: var(--size-4-3);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  /* 主题卡片 */
+  /* 紧凑主题卡片 */
   .theme-card {
-    background-color: var(--background-secondary);
-    border-radius: var(--radius-m);
-    padding: var(--size-4-3);
-    border-left: 3px solid var(--interactive-accent);
-    transition: all 0.15s ease;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 10px;
     cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
   }
 
   .theme-card:hover {
-    background-color: var(--background-secondary-alt);
-    transform: translateX(2px);
+    border-color: var(--interactive-accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   }
 
   .theme-card.read {
-    opacity: 0.7;
-    border-left-color: var(--text-muted);
+    opacity: 0.6;
+    background-color: var(--background-secondary);
   }
 
-  .theme-card.archived {
-    opacity: 0.5;
-    border-left-color: var(--text-faint);
-  }
-
-  /* 卡片头部 */
+  /* 头部 */
   .card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--size-4-2);
+    align-items: flex-start;
+    margin-bottom: 6px;
   }
 
-  .card-meta {
+  .title-row {
     display: flex;
-    align-items: center;
-    gap: var(--size-4-2);
+    align-items: baseline;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
   }
 
-  .category {
-    background-color: var(--background-modifier-accent);
-    color: var(--text-accent);
-    padding: 2px 8px;
-    border-radius: var(--radius-s);
-    font-size: var(--font-ui-smaller);
-    font-weight: 500;
-  }
-
-  .new-badge {
+  .new-dot {
+    width: 6px;
+    height: 6px;
     background-color: var(--color-red);
-    color: white;
-    padding: 1px 6px;
-    border-radius: var(--radius-s);
-    font-size: 10px;
-    font-weight: 600;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transform: translateY(-2px);
   }
 
-  .archived-badge {
-    background-color: var(--text-faint);
-    color: var(--background-primary);
-    padding: 1px 6px;
-    border-radius: var(--radius-s);
-    font-size: 10px;
+  .title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+    color: var(--text-normal);
   }
 
   .importance-badge {
-    font-size: var(--font-ui-smaller);
-    padding: 2px 8px;
-    border-radius: var(--radius-s);
-    font-weight: 500;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 8px;
+    flex-shrink: 0;
+    background-color: var(--background-modifier-border);
+    color: var(--text-muted);
   }
 
   .importance-badge.high {
-    background-color: rgba(255, 100, 100, 0.2);
     color: var(--color-red);
-  }
-
-  .importance-badge.medium {
-    background-color: rgba(255, 200, 100, 0.2);
-    color: var(--color-yellow);
-  }
-
-  .importance-badge.low {
-    background-color: rgba(100, 200, 100, 0.2);
-    color: var(--color-green);
-  }
-
-  /* 标题 */
-  .title {
-    font-size: var(--font-ui-medium);
-    font-weight: 600;
-    margin-bottom: var(--size-4-2);
-    line-height: 1.4;
+    background-color: rgba(var(--color-red-rgb), 0.1);
   }
 
   /* 摘要 */
   .summary {
+    font-size: 12px;
     color: var(--text-muted);
-    font-size: var(--font-ui-small);
-    margin-bottom: var(--size-4-2);
-    line-height: 1.5;
+    margin: 0 0 8px 0;
+    line-height: 1.4;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
-  /* 标签 */
-  .tags {
+  /* 元数据行 */
+  .meta-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--size-4-1);
-    margin-bottom: var(--size-4-2);
-  }
-
-  .tag {
-    background-color: var(--background-modifier-border);
-    color: var(--text-muted);
-    padding: 1px 6px;
-    border-radius: var(--radius-s);
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
     font-size: 11px;
   }
 
-  /* 卡片底部 */
+  .keywords {
+    display: flex;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .keyword {
+    color: var(--interactive-accent);
+  }
+
+  .category-tag {
+    background-color: var(--background-modifier-border);
+    color: var(--text-muted);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* 底部 */
   .card-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: var(--font-ui-smaller);
-    color: var(--text-faint);
-    padding-top: var(--size-4-2);
-    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 6px;
+    border-top: 1px dashed var(--background-modifier-border);
   }
 
-  .footer-info {
-    display: flex;
-    gap: var(--size-4-3);
+  .time {
+    font-size: 10px;
+    color: var(--text-faint);
   }
 
   .card-actions {
     display: flex;
-    gap: var(--size-4-1);
+    gap: 4px;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity 0.2s;
   }
 
   .theme-card:hover .card-actions {
@@ -410,18 +386,20 @@
   .action-btn {
     background: none;
     border: none;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: var(--text-muted);
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: var(--radius-s);
-    font-size: 14px;
-    transition: background-color 0.15s;
+    border-radius: 3px;
   }
 
   .action-btn:hover {
     background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
   }
 
   .action-btn.delete:hover {
-    background-color: rgba(255, 100, 100, 0.2);
+    color: var(--color-red);
+    background-color: rgba(var(--color-red-rgb), 0.1);
   }
 </style>
