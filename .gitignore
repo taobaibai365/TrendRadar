@@ -13,6 +13,11 @@ __pycache__/
 .env.local
 .env.*.local
 
+# Sensitive configuration files with API keys
+config/config.yaml
+config/ai_config.json
+config/sources.json
+
 # Docker
 .docker/
 
