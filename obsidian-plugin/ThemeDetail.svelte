@@ -126,8 +126,10 @@
 
   <!-- 原始文章来源 -->
   <div class="section">
-    <h2>📰 信息来源 ({theme.articles.length})</h2>
-    <div class="articles-list">
+    {#if !isLinkSummary}
+      <h2>📰 信息来源 ({theme.articles.length})</h2>
+    {/if}
+    <div class="articles-list" class:link-summary-list={isLinkSummary}>
       {#each theme.articles as article}
         <div class="article-item">
           <div class="article-header">
@@ -355,6 +357,12 @@
     max-height: 300px;
     overflow-y: auto;
     padding-right: var(--size-4-2);
+  }
+
+  /* 链接汇总类型：无边距，更紧凑 */
+  .link-summary-list {
+    gap: var(--size-4-2);
+    max-height: 400px;
   }
 
   .article-item {
