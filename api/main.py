@@ -552,7 +552,7 @@ def delete_source(source_id: str):
     error_tracker = get_error_tracker()
     error_tracker.resolve_errors(error_type="source", source=source.name)
 
-    manager.remove_source(source_id)
+    manager.delete_source(source_id)
     return {"success": True, "message": f"Source '{source_id}' deleted"}
 
 
