@@ -596,6 +596,16 @@ export async function triggerFetch(apiUrl: string): Promise<boolean> {
 }
 
 /**
+ * 触发立即抓取任务（返回完整结果）
+ */
+export async function triggerFetchWithResult(apiUrl: string): Promise<{ success: boolean; message: string; current_status?: string }> {
+    if (!apiUrl) return { success: false, message: 'API URL not configured' };
+
+    const result = await apiRequest<{ success: boolean; message: string; current_status?: string } | null>(`${apiUrl}/api/tasks/fetch`, 'POST');
+    return result || { success: false, message: 'Request failed' };
+}
+
+/**
  * 获取抓取状态
  */
 export async function getFetchStatus(apiUrl: string): Promise<FetchStatus | null> {

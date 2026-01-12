@@ -486,8 +486,16 @@ def delete_theme(theme_id: int, date: Optional[str] = None):
 @app.get("/api/sources", tags=["Sources"], response_model=List[SourceConfigModel])
 def get_sources():
     """获取所有数据源配置"""
-    manager = get_source_manager()
-    return [config.to_dict() for config in manager.get_all_sources()]
+    # 使用 SourceGroupManager 而不是旧的 SourceManager
+    group_manager = get_source_group_manager()
+    groups = group_manager.get_all_groups()
+
+    # 收集所有分组中的数据源
+    all_sources = []
+    for group in groups:
+        all_sources.extend([source.to_dict() for source in group.sources])
+
+    return all_sources
 
 
 @app.post("/api/sources", tags=["Sources"], response_model=SourceConfigModel)
@@ -542,8 +550,16 @@ def update_source(source_id: str, source: SourceConfigModel):
 @app.delete("/api/sources/{source_id}", tags=["Sources"])
 def delete_source(source_id: str):
     """删除数据源"""
-    manager = get_source_manager()
-    source = manager.get_source(source_id)
+    # 使用 SourceGroupManager 而不是旧的 SourceManager
+    group_manager = get_source_group_manager()
+
+    # 查找数据源所在的分组
+    group_id = group_manager.find_source_group(source_id)
+    if not group_id:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    group = group_manager.get_group(group_id)
+    source = next((s for s in group.sources if s.id == source_id), None)
 
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -552,8 +568,13 @@ def delete_source(source_id: str):
     error_tracker = get_error_tracker()
     error_tracker.resolve_errors(error_type="source", source=source.name)
 
-    manager.delete_source(source_id)
-    return {"success": True, "message": f"Source '{source_id}' deleted"}
+    # 从分组中删除数据源
+    if group_manager.remove_source_from_group(group_id, source_id):
+        # 保存配置
+        group_manager.save_config()
+        return {"success": True, "message": f"Source '{source_id}' deleted"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete source")
 
 
 # ========================================
@@ -1036,9 +1057,25 @@ def trigger_fetch(background_tasks: BackgroundTasks):
     触发立即抓取任务
 
     此操作会在后台异步执行抓取和分析流程。
+    如果已有任务正在运行，将忽略此请求。
     """
+    global _last_fetch_status
+
+    # 检查是否已有任务在运行
+    if _last_fetch_status.get("status") == "running":
+        return {
+            "success": False,
+            "message": "Fetch task already running",
+            "current_status": _last_fetch_status["status"]
+        }
+
+    # 启动后台任务
     background_tasks.add_task(run_fetch_task)
-    return {"success": True, "message": "Fetch task started in background"}
+    return {
+        "success": True,
+        "message": "Fetch task started in background",
+        "current_status": "running"
+    }
 
 
 @app.get("/api/tasks/status", tags=["Tasks"])

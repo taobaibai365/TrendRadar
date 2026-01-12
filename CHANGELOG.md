@@ -4,6 +4,66 @@ All notable changes to TrendRadar will be documented in this file.
 
 ## [Unreleased] - 2026-01-11
 
+### 🐛 Bug Fixes - 数据源删除功能修复
+
+**问题描述**：
+- 通过配置界面删除数据源时，虽然前端显示删除成功，但配置文件中的数据源并未实际删除
+- 后台调度器继续尝试抓取已删除的数据源，导致持续报错（如华尔街见闻的403错误）
+
+**根本原因**：
+- API 接口使用的是旧的 `SourceManager`（读取 `config/sources.json`）
+- 实际配置存储在 `config/source_groups.json`，由 `SourceGroupManager` 管理
+- `SourceGroupManager` 缺少删除单个数据源的方法
+
+**修复内容**：
+
+**文件**: `trendradar/sources/group_manager.py`
+- 新增 `remove_source_from_group(group_id, source_id)` - 从分组中删除指定数据源
+- 新增 `find_source_group(source_id)` - 查找包含指定数据源的分组ID
+
+**文件**: `api/main.py`
+- 修改 `GET /api/sources` - 现在从 `SourceGroupManager` 读取所有分组的数据源
+- 修改 `DELETE /api/sources/{source_id}` - 使用 `SourceGroupManager` 删除数据源并保存配置
+
+**验证结果**：
+- ✅ 删除操作立即生效并保存到 `config/source_groups.json`
+- ✅ 后台调度器停止抓取已删除的数据源
+- ✅ 不再有相关错误日志
+
+### 🚀 Feature Improvements - 防止并发抓取和状态显示
+
+**背景**：
+- 用户在后台抓取过程中重复点击"立即抓取"按钮，可能导致并发冲突
+- 按钮没有显示当前抓取状态，用户体验不佳
+- 项目不需要高频抓取，应该确保同一时间只有一个任务在运行
+
+**修复内容**：
+
+**文件**: `api/main.py`
+- **防止并发**：`POST /api/tasks/fetch` 接口现在会检查 `_last_fetch_status["status"]`
+  - 如果状态为 `"running"`，返回错误而不是启动新任务
+  - 确保同一时间只有一个抓取任务在运行
+
+**文件**: `obsidian-plugin/main.ts`
+- **点击前检查**：触发任务前先检查当前状态，如果正在运行则显示提示
+- **详细反馈**：
+  - ✅ 任务启动成功："抓取任务已在后台启动，请稍后刷新查看结果"
+  - ⏳ 任务正在运行："抓取任务正在运行中，请勿重复触发"
+  - ❌ 其他错误："触发失败: {错误信息}"
+- **自动状态更新**：每5秒检查一次抓取状态
+- **按钮状态变化**：
+  - 运行中：显示 "⏳ 抓取中..." 并禁用按钮
+  - 空闲：显示 "🚀 开始抓取" 并启用按钮
+- **资源管理**：设置页面关闭时自动清理定时器
+
+**文件**: `obsidian-plugin/api.ts`
+- 新增 `triggerFetchWithResult()` - 返回完整的响应信息（success, message, current_status）
+
+**用户体验提升**：
+- 一眼看出任务是否正在运行
+- 不会误触发重复请求
+- 清晰的状态反馈通知
+
 ### UI Improvements - 按钮图标和间距优化
 **文件**: `obsidian-plugin/ThemeList.svelte`
 - **图标优化**: 将 emoji 图标替换为 SVG 图标，提升视觉效果

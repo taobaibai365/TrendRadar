@@ -20,6 +20,7 @@ import {
 	deleteAIService,
 	type AIService,
 	triggerFetch,
+	triggerFetchWithResult,
 	getFetchStatus,
 	type FetchStatus,
 	type SourceConfig as ApiSourceConfig
@@ -246,10 +247,17 @@ class TrendRadarSettingTab extends PluginSettingTab {
 	plugin: TrendRadarPlugin;
 	private activeTab: string = 'general';
 	private contentContainer: HTMLElement;
+	fetchStatusIntervalIds: number[] = [];
 
 	constructor(app: App, plugin: TrendRadarPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	hide() {
+		// 清理所有定时器
+		this.fetchStatusIntervalIds.forEach(id => clearInterval(id));
+		this.fetchStatusIntervalIds = [];
 	}
 
 	display(): void {
@@ -362,25 +370,70 @@ class TrendRadarSettingTab extends PluginSettingTab {
 		// 任务控制
 		container.createEl('h3', { text: '任务控制' });
 		
+		// 存储定时器ID以便清理
+		if (!this.fetchStatusIntervalIds) {
+			this.fetchStatusIntervalIds = [];
+		}
+
 		new Setting(container)
 			.setName('立即抓取')
 			.setDesc('手动触发一次完整的数据抓取和分析任务（后台运行）')
-			.addButton(button => button
-				.setButtonText('🚀 开始抓取')
-				.setCta()
-				.onClick(async () => {
-					new Notice('正在触发抓取任务...');
+			.addButton(button => {
+				const updateButtonState = async () => {
 					try {
-						const success = await triggerFetch(this.plugin.settings.apiUrl);
-						if (success) {
-							new Notice('抓取任务已在后台启动，请稍后刷新查看结果');
+						const status = await getFetchStatus(this.plugin.settings.apiUrl);
+						if (status && status.status === 'running') {
+							button.setButtonText('⏳ 抓取中...').setDisabled(true);
 						} else {
-							new Notice('触发失败，请检查后端连接');
+							button.setButtonText('🚀 开始抓取').setDisabled(false);
 						}
 					} catch (error) {
-						new Notice('触发失败: ' + error);
+						// 忽略错误，保持默认状态
 					}
-				}));
+				};
+
+				button.setButtonText('🚀 开始抓取')
+					.setCta()
+					.onClick(async () => {
+						// 首先检查当前状态
+						try {
+							const status = await getFetchStatus(this.plugin.settings.apiUrl);
+
+							// 如果正在运行，提示用户
+							if (status && status.status === 'running') {
+								new Notice('⏳ 抓取任务正在运行中，请稍后再试');
+								return;
+							}
+						} catch (error) {
+							console.error('检查状态失败:', error);
+						}
+
+						// 触发抓取任务
+						try {
+							const result = await triggerFetchWithResult(this.plugin.settings.apiUrl);
+
+							if (result.success) {
+								new Notice('✅ 抓取任务已在后台启动，请稍后刷新查看结果');
+								// 立即更新按钮状态
+								updateButtonState();
+							} else if (result.message === 'Fetch task already running') {
+								new Notice('⏳ 抓取任务正在运行中，请勿重复触发');
+								updateButtonState();
+							} else {
+								new Notice('❌ 触发失败: ' + result.message);
+							}
+						} catch (error) {
+							new Notice('❌ 触发失败: ' + error);
+						}
+					});
+
+				// 初始检查
+				updateButtonState();
+
+				// 每5秒检查一次状态
+				const intervalId = setInterval(updateButtonState, 5000);
+				this.fetchStatusIntervalIds.push(intervalId);
+			});
 	}
 
 	renderSourceGroupsSettings() {
