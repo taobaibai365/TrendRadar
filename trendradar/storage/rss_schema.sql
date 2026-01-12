@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS analysis_themes (
     category TEXT,
     importance INTEGER,
     impact INTEGER,
+    status TEXT DEFAULT 'unread',  -- 主题状态: unread, read, archived
+    read_at TIMESTAMP,  -- 标记为已读的时间
+    is_duplicate INTEGER DEFAULT 0,  -- 是否为重复内容：0=否，1=是
+    duplicate_similarity REAL,  -- 与历史记录的相似度（0-1）
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -39,6 +43,8 @@ CREATE TABLE IF NOT EXISTS rss_items (
     summary TEXT,
     author TEXT,
     theme_id INTEGER, -- 关联到分析主题 (新)
+    analyzed INTEGER DEFAULT 0, -- 是否已被AI分析过：0=未分析，1=已分析
+    needs_link_card INTEGER DEFAULT 0, -- 是否需要生成链接卡片：0=否，1=是（全文抓取失败时）
     first_crawl_time TEXT NOT NULL,
     last_crawl_time TEXT NOT NULL,
     crawl_count INTEGER DEFAULT 1,
@@ -102,3 +108,23 @@ CREATE INDEX IF NOT EXISTS idx_rss_theme_id ON rss_items(theme_id);
 
 -- 全文内容关联索引
 CREATE INDEX IF NOT EXISTS idx_article_contents_rss_item_id ON article_contents(rss_item_id);
+
+-- ============================================
+-- 已处理内容历史表（用于去重）
+-- ============================================
+CREATE TABLE IF NOT EXISTS processed_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    theme_id INTEGER NOT NULL,  -- 关联的原始主题ID
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    category TEXT,
+    tags TEXT,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL CHECK(status IN ('deleted', 'archived', 'exported')),
+    FOREIGN KEY (theme_id) REFERENCES analysis_themes(id)
+);
+
+-- 已处理历史索引
+CREATE INDEX IF NOT EXISTS idx_processed_history_status ON processed_history(status);
+CREATE INDEX IF NOT EXISTS idx_processed_history_processed_at ON processed_history(processed_at);
+CREATE INDEX IF NOT EXISTS idx_processed_history_category ON processed_history(category);

@@ -112,7 +112,7 @@ class LocalStorageBackend(StorageBackend):
         db_path = str(self._get_db_path(date, db_type))
 
         if db_path not in self._db_connections:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             self._init_tables(conn, db_type)
             self._db_connections[db_path] = conn
@@ -150,7 +150,109 @@ class LocalStorageBackend(StorageBackend):
         else:
             raise FileNotFoundError(f"Schema file not found: {schema_path}")
 
+        # 迁移：添加新字段到现有表
+        if db_type == "rss":
+            self._migrate_rss_database(conn)
+
         conn.commit()
+
+    def _migrate_rss_database(self, conn: sqlite3.Connection) -> None:
+        """
+        迁移 RSS 数据库，添加缺失的列
+
+        Args:
+            conn: 数据库连接
+        """
+        cursor = conn.cursor()
+
+        # 检查 analysis_themes 表的现有列
+        cursor.execute("PRAGMA table_info(analysis_themes)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        # 添加 is_duplicate 列（如果不存在）
+        if "is_duplicate" not in existing_columns:
+            print("[Storage] 添加 is_duplicate 列到 analysis_themes 表")
+            cursor.execute("""
+                ALTER TABLE analysis_themes ADD COLUMN is_duplicate INTEGER DEFAULT 0
+            """)
+
+        # 添加 duplicate_similarity 列（如果不存在）
+        if "duplicate_similarity" not in existing_columns:
+            print("[Storage] 添加 duplicate_similarity 列到 analysis_themes 表")
+            cursor.execute("""
+                ALTER TABLE analysis_themes ADD COLUMN duplicate_similarity REAL
+            """)
+
+        # 检查并添加 status 列（旧版本可能没有）
+        if "status" not in existing_columns:
+            print("[Storage] 添加 status 列到 analysis_themes 表")
+            cursor.execute("""
+                ALTER TABLE analysis_themes ADD COLUMN status TEXT DEFAULT 'unread'
+            """)
+
+        # 检查并添加 read_at 列（旧版本可能没有）
+        if "read_at" not in existing_columns:
+            print("[Storage] 添加 read_at 列到 analysis_themes 表")
+            cursor.execute("""
+                ALTER TABLE analysis_themes ADD COLUMN read_at TIMESTAMP
+            """)
+
+        # 检查 rss_items 表的现有列
+        cursor.execute("PRAGMA table_info(rss_items)")
+        rss_existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        # 添加 analyzed 列（如果不存在）
+        if "analyzed" not in rss_existing_columns:
+            print("[Storage] 添加 analyzed 列到 rss_items 表")
+            cursor.execute("""
+                ALTER TABLE rss_items ADD COLUMN analyzed INTEGER DEFAULT 0
+            """)
+
+        # 添加 needs_link_card 列（如果不存在）
+        if "needs_link_card" not in rss_existing_columns:
+            print("[Storage] 添加 needs_link_card 列到 rss_items 表")
+            cursor.execute("""
+                ALTER TABLE rss_items ADD COLUMN needs_link_card INTEGER DEFAULT 0
+            """)
+
+    def _is_content_invalid(self, content: str) -> bool:
+        """
+        检查抓取的内容是否无效（太短或包含错误提示）
+
+        Args:
+            content: 抓取的文章内容
+
+        Returns:
+            True 表示内容无效，应该跳过 AI 分析，但需要生成链接汇总卡片
+        """
+        if not content:
+            return True
+
+        content_stripped = content.strip()
+        content_lower = content_stripped.lower()
+
+        # 检查长度
+        if len(content_stripped) < 100:
+            return True
+
+        # 检查是否包含常见的错误提示
+        invalid_patterns = [
+            "enable javascript",
+            "javascript must be enabled",
+            "please enable javascript",
+            "需要启用 javascript",
+            "需要启用脚本",
+        ]
+
+        for pattern in invalid_patterns:
+            if pattern in content_lower:
+                return True
+
+        # 检查是否只是兜底文本（如"30654篇文章"）
+        if len(content_stripped) < 200 and "篇文章" in content_stripped:
+            return True
+
+        return False
 
     def save_news_data(self, data: NewsData) -> bool:
         """
@@ -1039,6 +1141,7 @@ class LocalStorageBackend(StorageBackend):
                                 new_count += 1
 
                                 # --- 全文抓取 ---
+                                needs_link_only_card = False  # 是否需要生成链接卡片
                                 if session and item.url:
                                     content = scrape_article_content(item.url, session)
                                     if content:
@@ -1047,6 +1150,21 @@ class LocalStorageBackend(StorageBackend):
                                             VALUES (?, ?)
                                         """, (new_id, content))
                                         content_scraped_count += 1
+
+                                        # 检查内容质量，如果太差则标记需要生成链接卡片
+                                        if self._is_content_invalid(content):
+                                            print(f"[本地存储] 内容质量不佳，将生成链接卡片: {item.title[:50]}...")
+                                            needs_link_only_card = True
+                                    else:
+                                        # 抓取完全失败，也需要生成链接卡片
+                                        print(f"[本地存储] 全文抓取失败，将生成链接卡片: {item.title[:50]}...")
+                                        needs_link_only_card = True
+
+                                # 如果需要生成链接卡片，标记该字段
+                                if needs_link_only_card:
+                                    cursor.execute("""
+                                        UPDATE rss_items SET needs_link_card = 1 WHERE id = ?
+                                    """, (new_id,))
 
                         else:
                             # URL 为空，直接插入
@@ -1283,6 +1401,150 @@ class LocalStorageBackend(StorageBackend):
         except Exception as e:
             print(f"[本地存储] 读取 AI 主题失败: {e}")
             return []
+
+    # ============================================
+    # 已处理内容历史管理（去重功能）
+    # ============================================
+
+    def add_to_processed_history(
+        self,
+        theme_id: int,
+        title: str,
+        summary: str,
+        category: str,
+        tags: List[str],
+        status: str
+    ) -> bool:
+        """
+        添加主题到已处理历史
+
+        Args:
+            theme_id: 主题ID
+            title: 标题
+            summary: 摘要
+            category: 分类
+            tags: 标签列表
+            status: 状态 ('deleted', 'archived', 'exported')
+
+        Returns:
+            是否成功
+        """
+        try:
+            conn = self._get_connection(db_type="rss")
+            cursor = conn.cursor()
+
+            tags_json = json.dumps(tags, ensure_ascii=False) if tags else None
+
+            cursor.execute("""
+                INSERT INTO processed_history (theme_id, title, summary, category, tags, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (theme_id, title, summary, category, tags_json, status))
+
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[本地存储] 添加到已处理历史失败: {e}")
+            return False
+
+    def get_processed_history(
+        self,
+        status: Optional[str] = None,
+        days: Optional[int] = None,
+        limit: Optional[int] = None,
+        category: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        获取已处理内容历史
+
+        Args:
+            status: 过滤状态 ('deleted', 'archived', 'exported')
+            days: 最近N天
+            limit: 最大记录数
+            category: 过滤分类
+
+        Returns:
+            历史记录列表
+        """
+        try:
+            conn = self._get_connection(db_type="rss")
+            cursor = conn.cursor()
+
+            # 构建查询条件
+            conditions = []
+            params = []
+
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+
+            if days:
+                conditions.append("processed_at >= datetime('now', '-' || ? || ' days')")
+                params.append(days)
+
+            if category:
+                conditions.append("category = ?")
+                params.append(category)
+
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+            # 添加排序和限制
+            query = f"""
+                SELECT theme_id, title, summary, category, tags, processed_at, status
+                FROM processed_history
+                WHERE {where_clause}
+                ORDER BY processed_at DESC
+            """
+
+            if limit:
+                query += f" LIMIT {limit}"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            history = []
+            for row in rows:
+                history.append({
+                    "theme_id": row["theme_id"],
+                    "title": row["title"],
+                    "summary": row["summary"],
+                    "category": row["category"] or "其他",
+                    "tags": json.loads(row["tags"]) if row["tags"] else [],
+                    "processed_at": row["processed_at"],
+                    "status": row["status"]
+                })
+
+            return history
+        except Exception as e:
+            print(f"[本地存储] 获取已处理历史失败: {e}")
+            return []
+
+    def cleanup_old_history(self, retention_days: int = 90) -> int:
+        """
+        清理旧的已处理历史记录
+
+        Args:
+            retention_days: 保留天数
+
+        Returns:
+            删除的记录数
+        """
+        try:
+            conn = self._get_connection(db_type="rss")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                DELETE FROM processed_history
+                WHERE processed_at < datetime('now', '-' || ? || ' days')
+            """, (retention_days,))
+
+            deleted_count = cursor.rowcount
+            conn.commit()
+
+            return deleted_count
+        except Exception as e:
+            print(f"[本地存储] 清理旧历史记录失败: {e}")
+            return 0
+
 
     def detect_new_rss_items(self, current_data: RSSData) -> Dict[str, List[RSSItem]]:
         """

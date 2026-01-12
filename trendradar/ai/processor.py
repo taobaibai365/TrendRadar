@@ -293,3 +293,68 @@ class AIProcessor:
             impact=10,
             key_points=["AI 服务未生效", "请检查配置", "查看后端日志"]
         )
+
+    def aggregate_summaries(self, summaries: List[str]) -> str:
+        """
+        聚合多个摘要成一个简短的汇总
+
+        Args:
+            summaries: 多个摘要字符串列表
+
+        Returns:
+            聚合后的摘要字符串
+        """
+        if not summaries:
+            return ""
+
+        if len(summaries) == 1:
+            return summaries[0]
+
+        # 如果没有配置 API Key，返回简单的拼接
+        if not self.api_key or self.provider == "mock":
+            # 取第一个摘要的前 200 字符，并说明还有更多
+            first_summary = summaries[0]
+            if len(first_summary) > 200:
+                first_summary = first_summary[:200] + "..."
+            return f"{first_summary}\n\n（还有 {len(summaries) - 1} 篇相关文章）"
+
+        # 使用 AI 进行聚合
+        prompt = f"""请将以下 {len(summaries)} 篇文章的摘要合并成一个简短的汇总（不超过 200 字）：
+
+文章摘要：
+{chr(10).join(f'{i+1}. {s}' for i, s in enumerate(summaries))}
+
+要求：
+- 提取共同的主题和关键信息
+- 简明扼要，不超过 200 字
+- 使用中文回复
+- 不要添加任何额外说明，直接返回汇总内容
+"""
+
+        try:
+            if self.provider == "gemini":
+                # Gemini 不支持聚合功能，回退到简单拼接
+                first_summary = summaries[0]
+                if len(first_summary) > 200:
+                    first_summary = first_summary[:200] + "..."
+                return f"{first_summary}\n\n（聚合了 {len(summaries)} 篇文章）"
+            else:
+                # 使用 OpenAI 兼容 API
+                result = self._call_openai_compatible_api(prompt)
+                if isinstance(result, dict):
+                    # 提取聚合结果
+                    if 'summary' in result:
+                        return result['summary']
+                    elif 'aggregated_summary' in result:
+                        return result['aggregated_summary']
+                    else:
+                        # 假设整个结果就是汇总文本
+                        return str(result)
+                return str(result)
+        except Exception as e:
+            print(f"[AI Processor] 聚合摘要失败: {e}，使用简单拼接")
+            # 回退到简单拼接
+            first_summary = summaries[0]
+            if len(first_summary) > 200:
+                first_summary = first_summary[:200] + "..."
+            return f"{first_summary}\n\n（聚合了 {len(summaries)} 篇文章）"

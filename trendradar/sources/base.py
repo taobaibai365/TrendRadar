@@ -17,6 +17,7 @@ class SourceType(str, Enum):
     RSS = "rss"
     WEB = "web"
     TWITTER = "twitter"
+    LOCAL = "local"  # 本地文件数据源
 
 
 @dataclass

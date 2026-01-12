@@ -1,0 +1,72 @@
+{
+  "source_groups": [
+    {
+      "id": "test",
+      "name": "test",
+      "enabled": true,
+      "ai_config": {
+        "mode": "single",
+        "analysis_service_id": "migrated-deepseek-deepseek-chat",
+        "aggregation_service_id": ""
+      },
+      "sources": [
+        {
+          "id": "pm",
+          "name": "人人都是产品经理",
+          "type": "rss",
+          "enabled": true,
+          "url": "https://www.woshipm.com/feed",
+          "username": "",
+          "selector": "",
+          "schedule": "*/5 * * * *",
+          "retention_days": 30,
+          "max_items": 50,
+          "use_proxy": false,
+          "extra": {}
+        },
+        {
+          "id": "hacker-news",
+          "name": "Hacker News",
+          "type": "rss",
+          "enabled": true,
+          "url": "https://hnrss.org/frontpage",
+          "username": "",
+          "selector": "",
+          "schedule": "0 * * * *",
+          "retention_days": 7,
+          "max_items": 30,
+          "use_proxy": false,
+          "extra": {}
+        },
+        {
+          "id": "rss_1768037355291",
+          "name": "少数派",
+          "type": "rss",
+          "enabled": true,
+          "url": "https://sspai.com/feed",
+          "username": "",
+          "selector": "",
+          "schedule": "0 * * * *",
+          "retention_days": 7,
+          "max_items": 20,
+          "use_proxy": false,
+          "extra": {}
+        },
+        {
+          "id": "rss_1768121206930",
+          "name": "36Kr",
+          "type": "rss",
+          "enabled": true,
+          "url": "https://www.36kr.com/feed",
+          "username": "",
+          "selector": "",
+          "schedule": "0 * * * *",
+          "retention_days": 7,
+          "max_items": 20,
+          "use_proxy": false,
+          "extra": {}
+        }
+      ]
+    }
+  ]
+}

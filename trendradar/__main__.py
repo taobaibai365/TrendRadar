@@ -19,8 +19,6 @@ from trendradar.core import load_config
 from trendradar.core.analyzer import convert_keyword_stats_to_platform_stats
 from trendradar.core.ai_analyzer import run_ai_analysis
 from trendradar.ai.processor import AIProcessor
-from trendradar.crawler import DataFetcher
-from trendradar.storage import convert_crawl_results_to_news_data
 from trendradar.utils.time import is_within_days
 
 
@@ -122,7 +120,6 @@ class NewsAnalyzer:
         self.update_info = None
         self.proxy_url = None
         self._setup_proxy()
-        self.data_fetcher = DataFetcher(self.proxy_url)
 
         # 初始化存储管理器（使用 AppContext）
         self._init_storage_manager()
@@ -590,48 +587,6 @@ class NewsAnalyzer:
         mode_strategy = self._get_mode_strategy()
         print(f"报告模式: {self.report_mode}")
         print(f"运行模式: {mode_strategy['description']}")
-
-    def _crawl_data(self) -> Tuple[Dict, Dict, List]:
-        """执行数据爬取"""
-        ids = []
-        for platform in self.ctx.platforms:
-            if "name" in platform:
-                ids.append((platform["id"], platform["name"]))
-            else:
-                ids.append(platform["id"])
-
-        print(
-            f"配置的监控平台: {[p.get('name', p['id']) for p in self.ctx.platforms]}"
-        )
-        print(f"开始爬取数据，请求间隔 {self.request_interval} 毫秒")
-        Path("output").mkdir(parents=True, exist_ok=True)
-
-        results, id_to_name, failed_ids = self.data_fetcher.crawl_websites(
-            ids, self.request_interval
-        )
-
-        # 转换为 NewsData 格式并保存到存储后端
-        crawl_time = self.ctx.format_time()
-        crawl_date = self.ctx.format_date()
-        news_data = convert_crawl_results_to_news_data(
-            results, id_to_name, failed_ids, crawl_time, crawl_date
-        )
-
-        # 保存到存储后端（SQLite）
-        if self.storage_manager.save_news_data(news_data):
-            print(f"数据已保存到存储后端: {self.storage_manager.backend_name}")
-
-        # 保存 TXT 快照（如果启用）
-        txt_file = self.storage_manager.save_txt_snapshot(news_data)
-        if txt_file:
-            print(f"TXT 快照已保存: {txt_file}")
-
-        # 兼容：同时保存到原有 TXT 格式（确保向后兼容）
-        if self.ctx.config["STORAGE"]["FORMATS"]["TXT"]:
-            title_file = self.ctx.save_titles(results, id_to_name, failed_ids)
-            print(f"标题已保存到: {title_file}")
-
-        return results, id_to_name, failed_ids
 
     def _crawl_rss_data(self) -> Tuple[Optional[List[Dict]], Optional[List[Dict]]]:
         """
@@ -1133,12 +1088,7 @@ class NewsAnalyzer:
         try:
             self._initialize_and_check_config()
 
-            mode_strategy = self._get_mode_strategy()
-
-            # 抓取热榜数据
-            results, id_to_name, failed_ids = self._crawl_data()
-
-            # 抓取 RSS 数据（如果启用），返回统计条目和新增条目用于合并推送
+            # 抓取 RSS 和 Twitter 数据（如果启用），返回统计条目和新增条目
             rss_items, rss_new_items = self._crawl_rss_data()
 
             # 执行 AI 分析
@@ -1152,11 +1102,8 @@ class NewsAnalyzer:
             )
             run_ai_analysis(self.storage_manager._backend, ai_processor, self.ctx.format_date())
 
-            # 执行模式策略，传递 RSS 数据用于合并推送
-            self._execute_mode_strategy(
-                mode_strategy, results, id_to_name, failed_ids,
-                rss_items=rss_items, rss_new_items=rss_new_items
-            )
+            # 由于已移除热榜抓取功能，不再执行模式策略和通知发送
+            print("数据抓取和 AI 分析完成")
 
         except Exception as e:
             print(f"分析流程执行出错: {e}")

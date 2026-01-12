@@ -213,27 +213,44 @@ def _load_storage_config(config_data: Dict) -> Dict:
 
 
 def _load_ai_config(config_data: Dict) -> Dict:
-    """加载 AI 分析配置"""
-    ai_config = config_data.get("ai", {})
-    
-    # 读取通用AI配置
-    provider = _get_env_str("AI_PROVIDER") or ai_config.get("provider", "mock")
-    api_key = _get_env_str("AI_API_KEY") or ai_config.get("api_key", "")
-    model_name = _get_env_str("AI_MODEL_NAME") or ai_config.get("model_name", "")
-    
-    # 读取特定服务商的配置
-    providers_config = ai_config.get("providers", {})
-    provider_config = providers_config.get(provider, {})
-    
-    # 获取端点URL（先从provider_config获取，再从通用配置获取）
-    endpoint_url = provider_config.get("endpoint_url", ai_config.get("endpoint_url", ""))
-    
+    """加载 AI 分析配置（从 YAML，已废弃）"""
+    return _load_ai_config_from_json()
+
+
+def _load_ai_config_from_json() -> Dict:
+    """从 ai_config.json 加载 AI 配置"""
+    import json
+
+    ai_config_path = Path("config/ai_config.json")
+    if ai_config_path.exists():
+        try:
+            with open(ai_config_path, "r", encoding="utf-8") as f:
+                ai_json_config = json.load(f)
+                provider = ai_json_config.get("provider", "mock")
+                api_key = ai_json_config.get("api_key", "")
+                model_name = ai_json_config.get("model_name", "")
+                endpoint_url = ai_json_config.get("base_url", "")
+                temperature = ai_json_config.get("temperature", 0.7)
+
+                print(f"[AI] 从 ai_config.json 加载配置: provider={provider}, model={model_name}")
+
+                return {
+                    "AI_PROVIDER": provider,
+                    "AI_API_KEY": api_key,
+                    "AI_MODEL_NAME": model_name,
+                    "AI_ENDPOINT_URL": endpoint_url,
+                    "AI_PROVIDER_CONFIG": {"temperature": temperature}
+                }
+        except Exception as e:
+            print(f"[AI] 读取 ai_config.json 失败: {e}，使用默认配置")
+
+    # 默认配置
     return {
-        "AI_PROVIDER": provider,
-        "AI_API_KEY": api_key,
-        "AI_MODEL_NAME": model_name,
-        "AI_ENDPOINT_URL": endpoint_url,
-        "AI_PROVIDER_CONFIG": provider_config
+        "AI_PROVIDER": "mock",
+        "AI_API_KEY": "",
+        "AI_MODEL_NAME": "",
+        "AI_ENDPOINT_URL": "",
+        "AI_PROVIDER_CONFIG": {}
     }
 
 
@@ -360,8 +377,11 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
     加载配置文件
 
+    优先从 config/settings.json 加载（新格式），
+    如果不存在则回退到 config/config.yaml（旧格式）。
+
     Args:
-        config_path: 配置文件路径，默认从环境变量 CONFIG_PATH 获取或使用 config/config.yaml
+        config_path: 配置文件路径，默认从环境变量 CONFIG_PATH 获取或使用 config/settings.json
 
     Returns:
         包含所有配置的字典
@@ -369,11 +389,39 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     Raises:
         FileNotFoundError: 配置文件不存在
     """
+    # 如果没有指定路径，优先尝试 JSON 配置
     if config_path is None:
-        config_path = os.environ.get("CONFIG_PATH", "config/config.yaml")
+        config_path = os.environ.get("CONFIG_PATH", "config/settings.json")
 
+    # 尝试从 JSON 加载
+    if config_path.endswith(".json") or "settings.json" in config_path:
+        try:
+            from .json_loader import load_json_config
+            config = load_json_config(config_path)
+
+            # 加载 AI 配置（从 ai_config.json）
+            config.update(_load_ai_config_from_json())
+
+            # 打印通知渠道配置来源
+            _print_notification_sources(config)
+
+            return config
+        except ImportError:
+            print("JSON 加载器不可用，回退到 YAML")
+        except Exception as e:
+            print(f"JSON 配置加载失败: {e}，回退到 YAML")
+
+    # 回退到 YAML 加载
     if not Path(config_path).exists():
-        raise FileNotFoundError(f"配置文件 {config_path} 不存在")
+        # 如果是 settings.json 不存在，自动创建默认配置
+        if "settings.json" in config_path:
+            print("settings.json 不存在，将使用默认配置")
+            from .json_loader import load_json_config
+            config = load_json_config(None)
+            config.update(_load_ai_config_from_json())
+            return config
+        else:
+            raise FileNotFoundError(f"配置文件 {config_path} 不存在")
 
     with open(config_path, "r", encoding="utf-8") as f:
         config_data = yaml.safe_load(f)

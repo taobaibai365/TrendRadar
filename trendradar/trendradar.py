@@ -12,8 +12,6 @@ from trendradar.context import AppContext
 from trendradar.core import load_config
 from trendradar.core.ai_analyzer import run_ai_analysis
 from trendradar.ai.processor import AIProcessor
-from trendradar.crawler import DataFetcher
-from trendradar.storage import convert_crawl_results_to_news_data
 from trendradar.__main__ import NewsAnalyzer
 from trendradar.sources.manager import SourceManager
 

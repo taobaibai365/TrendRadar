@@ -1,0 +1,161 @@
+# TrendRadar 数据源分组配置示例
+#
+# 此配置文件展示如何使用数据源分组功能，实现混合模式的AI分析。
+#
+# 核心概念：
+# - 数据源组(Source Group): 多个数据源的逻辑分组
+# - AI配置: 每个分组可以使用不同的AI模型和配置
+# - 灵活组合: 可以将网络源和本地源混合在同一个分组中
+
+# ============================================
+# 全局默认AI配置
+# ============================================
+default_ai_config:
+  provider: "openai"
+  api_key: "${OPENAI_API_KEY}"  # 支持环境变量
+  base_url: "https://api.openai.com/v1"
+  model_name: "gpt-4o-mini"
+  temperature: 0.7
+
+# ============================================
+# 数据源分组列表
+# ============================================
+source_groups:
+  # ------------------------------------------------
+  # 分组1: 网络信息源（使用云端AI）
+  # ------------------------------------------------
+  - id: "network"
+    name: "网络信息源"
+    enabled: true
+    description: "来自RSS、网站和Twitter的网络信息"
+    ai_config:
+      provider: "openai"
+      api_key: "${OPENAI_API_KEY}"
+      model_name: "gpt-4o-mini"
+      base_url: "https://api.openai.com/v1"
+    sources:
+      # RSS订阅源
+      - type: "rss"
+        id: "techcrunch"
+        name: "TechCrunch"
+        url: "https://techcrunch.com/feed/"
+        enabled: true
+        max_items: 50
+        retention_days: 30
+        schedule: "0 * * * *"  # 每小时
+
+      - type: "rss"
+        id: "arstechnica"
+        name: "Ars Technica"
+        url: "https://feeds.arstechnica.com/arstechnica/index"
+        enabled: true
+        max_items: 30
+        retention_days: 30
+
+      # 网站抓取源
+      - type: "web"
+        id: "hackernews"
+        name: "Hacker News"
+        url: "https://news.ycombinator.com/"
+        selector: ".titleline > a"
+        enabled: true
+        max_items: 50
+
+  # ------------------------------------------------
+  # 分组2: 本地Inbox（与网络源混合分析，使用云端AI）
+  # ------------------------------------------------
+  - id: "inbox"
+    name: "随手收集"
+    enabled: true
+    description: "本地Inbox目录中的随手导入文章"
+    ai_config:
+      provider: "openai"
+      api_key: "${OPENAI_API_KEY}"
+      model_name: "gpt-4o-mini"
+    sources:
+      - type: "local"
+        id: "inbox-docs"
+        name: "Inbox文档"
+        enabled: true
+        max_items: 100
+        extra:
+          path: "/Users/xxx/Obsidian/Inbox"
+          file_patterns: ["*.md", "*.txt", "*.markdown"]
+          recursive: true
+
+  # ------------------------------------------------
+  # 分组3: 项目专用（独立分析，使用本地AI）
+  # ------------------------------------------------
+  - id: "project-x"
+    name: "某某项目"
+    enabled: true
+    description: "项目专用文档，使用本地部署的AI模型"
+    ai_config:
+      provider: "openai-compatible"
+      base_url: "http://localhost:11434/v1"  # Ollama endpoint
+      model_name: "llama3.2"
+      api_key: "local-key"
+      temperature: 0.7
+    sources:
+      - type: "local"
+        id: "project-x-docs"
+        name: "项目文档"
+        enabled: true
+        max_items: 200
+        extra:
+          path: "/Users/xxx/Obsidian/Projects/ProjectX"
+          file_patterns: ["*.md", "*.txt"]
+          recursive: true
+
+  # ------------------------------------------------
+  # 分组4: 工作相关（使用公司私有部署AI）
+  # ------------------------------------------------
+  - id: "work"
+    name: "工作资料"
+    enabled: false  # 暂时禁用
+    description: "工作相关的内部资料"
+    ai_config:
+      provider: "openai-compatible"
+      base_url: "https://ai.company.com/v1"
+      model_name: "company-llm-7b"
+      api_key: "${COMPANY_AI_KEY}"
+    sources:
+      - type: "local"
+        id: "work-docs"
+        name: "工作文档"
+        enabled: true
+        max_items: 500
+        extra:
+          path: "/Users/xxx/Documents/Work"
+          file_patterns: ["*.md", "*.docx", "*.pdf"]
+          recursive: true
+
+# ============================================
+# 使用说明
+# ============================================
+#
+# 1. 启用分组:
+#    将 enabled 设置为 true
+#
+# 2. 配置AI:
+#    - provider: 支持的AI提供商 (openai, deepseek, gemini, openai-compatible)
+#    - api_key: API密钥（支持环境变量 ${VAR_NAME}）
+#    - base_url: API端点URL
+#    - model_name: 模型名称
+#
+# 3. 配置数据源:
+#    - type: 数据源类型 (rss, web, twitter, local)
+#    - id: 唯一标识符
+#    - name: 显示名称
+#    - enabled: 是否启用
+#    - max_items: 最大抓取数量
+#    - extra: 额外配置（对于本地源，包括 path, file_patterns, recursive）
+#
+# 4. 环境变量:
+#    在 ~/.bashrc 或 ~/.zshrc 中添加:
+#    export OPENAI_API_KEY="sk-xxx"
+#    export COMPANY_AI_KEY="company-xxx"
+#
+# 5. 运行:
+#    trendradar --group network  # 只分析network分组
+#    trendradar --group all      # 分析所有启用的分组
